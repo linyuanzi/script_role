@@ -1,0 +1,81 @@
+#! /usr/bin/bash
+
+if [ $# -lt 6 ]; then
+    echo "$0: 使用方法: ./initialization.sh [PROJECT_NAME] [PID] [IP] [PORT] [DOMAIN] [SOURCE] [PATTERN_TYPE]"
+    exit 1
+fi
+
+# 确保 PROJECT_NAME 为大写
+PROJECT_NAME=$1
+PID=$2
+IP=$3
+PORT=$4
+DOMAIN=$5
+SOURCE=$6
+PATTERN_TYPE=$7
+
+PROJECT_NAME=`echo "$PROJECT_NAME" | tr '[:lower:]' '[:upper:]'`
+
+PROJECT_LIST=/opt/scripts/initialization/projects.txt
+RESULT_DIR=/opt/scripts/initialization/results
+
+#if grep -q $PROJECT_NAME $PROJECT_LIST;  then
+#cat <<ENDWRITE > $RESULT_DIR/${PROJECT_NAME}_ERROR.json
+#{ "status": 0,  "error":"项目名重复"}
+#ENDWRITE
+#exit 1
+#else
+#    echo $1 >> $PROJECT_LIST
+#fi
+
+# 通过 VPN 调用远程脚本执行
+ssh {{ jenkins_server_name }}@{{ jenkins_vpn_ip }} PROJECT_NAME=$PROJECT_NAME PID=$PID IP=$IP DOMAIN=$DOMAIN PORT=$PORT SOURCE=$SOURCE PATTERN_TYPE=$PATTERN_TYPE 'bash -s'<<'ENDSSH'
+    # 到内网服务器上执行相关脚本，初始化环境
+    cd /home/gitlab-runner/common/cloud && ./initialization.sh $PROJECT_NAME $PID $IP $PORT $DOMAIN $SOURCE $PATTERN_TYPE
+ENDSSH
+
+# 在云平台操作，部署在云平台本身的项目，无须这些操作
+if [ "$IP" = "{{ cloud_ip }}" ];then
+    echo "deploy in cloud host, no need to execute next step, such as sync database, source environment and so on"
+    exit 0
+fi
+
+# 获得初始化信息，比如项目首页url， 地址，密码，ssh port等
+scp -P$PORT root@$IP:/tmp/${PROJECT_NAME}.json $RESULT_DIR
+
+# 初始化数据库复用对应数据库密码
+MYSQL_CONF=/opt/scripts/.mysql.cnf
+space=`echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]'`
+password=$(cat $RESULT_DIR/$PROJECT_NAME.json | jq '.db_password' | tr -d '"')
+DATABASE=${space}_api
+
+mysql --defaults-file=$MYSQL_CONF -e "
+    create database $DATABASE charset='utf8';
+    create user '$DATABASE'@'%' identified by '$password';
+    grant all privileges on $DATABASE.* to '$DATABASE'@'%';
+"
+#ssh -P10240 root@ MYSQL_CONF=$MYSQL_CONF DATABASE=$DATABASE password=$password 'bash -s'<<'ENDSSH'
+#    mysql --defaults-file=$MYSQL_CONF -e "
+#    create user '$DATABASE'@'%' identified by '$password';
+#    grant all privileges on $DATABASE.* to '$DATABASE'@'%';
+#    "
+#ENDSSH
+ssh -P22 root@{{ project_server_ip }} MYSQL_CONF=$MYSQL_CONF DATABASE=$DATABASE password=$password 'bash -s'<<'ENDSSH'
+    mysql --defaults-file=$MYSQL_CONF -e "
+    create database $DATABASE charset='utf8';
+    create user '$DATABASE'@'%' identified by '$password';
+    grant all privileges on $DATABASE.* to '$DATABASE'@'%';
+    "
+ENDSSH
+# 导入初始化出来的数据库,保证两个数据库同步
+scp -P$PORT root@$IP:/tmp/${DATABASE}.sql $RESULT_DIR
+mysql --defaults-file=$MYSQL_CONF $DATABASE <  ${RESULT_DIR}/${DATABASE}.sql
+
+# 调用 python 脚本进行环境变量覆盖
+project_var_dir="/disk/environments/proj_var.d"
+transform_script_path='/disk/environments/preset/transform.py'
+scp -P$PORT root@$IP:${project_var_dir}/${PROJECT_NAME}.json $project_var_dir
+python $transform_script_path
+sudo supervisorctl reload
+sudo service php-fpm restart
+

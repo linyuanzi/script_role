@@ -1,0 +1,31 @@
+---
+# tasks file for jenkins server scripts
+
+- name: Add directory
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+  with_items: # 提前创建好路径
+    # 示例如下
+    # - /opt/scripts/test1
+    - /opt/scripts/jenkins1
+    - /opt/scripts/jenkins2
+  become: true
+
+- name: Add cloud script
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: 0755
+    backup: yes
+  with_items: # 脚本在这里设置数据位置
+    # 示例如下
+    # - {dest: /opt/scripts/test1/test1.sh, src: "cloud/test1.sh.j2"}
+    - {dest: /opt/scripts/jenkins1/test2.sh, src: "cloud/test2.sh.j2"}
+    - {dest: /opt/scripts/jenkins2/test3.sh, src: "cloud/test3.sh.j2"}
+  become: true

@@ -1,0 +1,16 @@
+#---
+# 脚本更新
+
+- name: cloud 腳本更新
+  hosts: cloud
+  roles:
+    - role: scripts
+      server_name: cloud
+      become: false
+
+- name: jenkins 腳本更新
+  hosts: jenkins
+  roles:
+    - role: scripts
+      server_name: jenkins
+      become: false

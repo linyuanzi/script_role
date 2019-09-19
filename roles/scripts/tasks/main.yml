@@ -1,0 +1,14 @@
+---
+# tasks file for scripts
+
+- name: cloud server update scripts
+  include_tasks: "cloud_scripts.yml"
+  when: server_name == "cloud"
+
+- name: jenkins server update scripts
+  include_tasks: "jenkins_scripts.yml"
+  when: server_name == "jenkins"
+
+- name: instance server update scripts
+  include_tasks: "instance_scripts.yml"
+  when: server_name == "instance"

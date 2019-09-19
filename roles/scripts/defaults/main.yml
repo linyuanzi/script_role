@@ -1,0 +1,7 @@
+---
+# defaults file for synchronize
+#
+
+# 控制在不同的服务器执行不同的配置，iscloudserver 为true，则在云平台服务器执行；为false则在实例化项目平台执行
+iscloudserver: true
+

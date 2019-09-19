@@ -1,0 +1,10 @@
+---
+# defaults file for synchronize
+
+recyclebinpath: /disk/destroyer
+scriptpath: /opt/scripts/test
+jenkins_server_name: root
+jenkins_vpn_ip: 192.168.1.78
+project_server_ip: 192.168.1.79
+cloud_ip: 192.168.1.79
+

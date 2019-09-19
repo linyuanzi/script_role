@@ -1,0 +1,62 @@
+{{ ansible_managed | comment }}
+#!/usr/bin/env bash
+set -u
+
+if [ $# -ne 2 ]; then
+    echo "Args Error"
+    echo "Usage: $0 SOURCEDIRECTORY HOSTIP"
+    exit -1
+fi
+
+echo $(date)
+echo "source directory: $1 , host ip:   $2" 
+
+SOURCE="$1"
+if [[ $2 =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    HOST=$2
+else
+    echo "WRONG host ip: $2, pls check it!"
+    exit 213
+fi
+PORT="{{ port }}" # "22"
+USERNAME="{{ username }}"
+PASSWORD="{{ password }}"
+TEMPDIR="{{ tempdir }}" # "/tmp/scptemp"
+RECYCLEBINPATH="{{ recyclebinpath }}" # "/disk/destroyer"
+JAILNAME="{{ jailname }}"
+
+
+# 源路径文件判断是否存在
+#echo "$SOURCE"
+if [ ! -e "$SOURCE" ]; then
+    echo "$SOURCE File does not exist"
+    exit -1
+fi
+
+# 处理源路径最后一个字符是/的情况
+if [ "${SOURCE: -1}" = "/" ]; then
+    SOURCE=${SOURCE%?}  # delete the last / 
+    echo "delete the last /"
+fi
+
+# 找到SOURCE的UPLOADS目录下文件目录的相对路径
+FILEPATH=${SOURCE##*/uploads/}
+#echo $FILEPATH
+if [ -z "$FILEPATH" ]; then
+    echo "Error $SOURCE"
+    exit -1
+fi
+
+# 保持目录结构的同时，只复制单个文件，而不是复制目录结构下所有文件
+[ -e ${TEMPDIR} ] && rm -r ${TEMPDIR} 
+mkdir ${TEMPDIR} && cd ${SOURCE%%$FILEPATH} && cp -r --parents ${FILEPATH} ${TEMPDIR} && cd ${TEMPDIR}
+
+SSHPASS="${PASSWORD}" sshpass -e sftp -oStrictHostKeyChecking=no -oBatchMode=no -b - "${USERNAME}"@"${HOST}" << EndOfLine
+   put -r "${FILEPATH%%/*}" ${JAILNAME}
+   bye
+EndOfLine
+#[ -e ${TEMPDIR} ] && mv -bf --suffix=$(date "+%Y%m%d%H%M%S") ${TEMPDIR} ${RECYCLEBINPATH} 
+[ -e ${TEMPDIR} ] && rm -r ${TEMPDIR} 
+
+echo "SEND $SOURCE to $HOST"
+
